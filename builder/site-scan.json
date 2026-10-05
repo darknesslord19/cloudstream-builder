@@ -1,0 +1,12 @@
+{
+  "siteUrl": "https://tavsiyefilmizle.net",
+  "kind": "movie",
+  "depth": "deep",
+  "discover": {
+    "categories": true,
+    "playback": true,
+    "subtitles": true
+  },
+  "requestedAt": "2026-10-05T18:28:26.392Z",
+  "source": "CloudStream Builder HTML AutoPilot"
+}
