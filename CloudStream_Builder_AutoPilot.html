@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>CloudStream Builder AutoPilot</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#090b12;color:#eef2ff;font-family:Inter,system-ui,sans-serif}
+.wrap{max-width:760px;margin:auto;padding:18px}.hero,.card{background:#111522;border:1px solid #252b3d;border-radius:20px;padding:18px;margin-bottom:14px;box-shadow:0 12px 35px #0005}
+h1{margin:0 0 6px;font-size:25px}.muted{color:#8f99b3;font-size:13px}
+label{display:block;margin:14px 0 7px;color:#b9c1d6;font-size:13px}
+input,select{width:100%;padding:13px;border-radius:12px;border:1px solid #30374b;background:#0b0e17;color:#fff;outline:none}
+button{width:100%;padding:14px;border:0;border-radius:12px;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;font-weight:800;margin-top:14px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.status{padding:12px;border-radius:12px;background:#0b0e17;border:1px solid #252b3d;margin-top:12px;white-space:pre-wrap}
+.small{font-size:12px;color:#9aa3ba;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <h1>CloudStream Builder AutoPilot</h1>
+    <div class="muted">Site → GitHub Actions → analiz → build → artifact</div>
+  </div>
+
+  <div class="card">
+    <label>GitHub Token</label>
+    <input id="token" type="password" placeholder="ghp_... / github_pat_...">
+    <label>Owner</label>
+    <input id="owner" value="darknesslord19">
+    <label>Repository</label>
+    <input id="repo" value="cloudstream-builder">
+    <label>Branch</label>
+    <input id="branch" value="main">
+  </div>
+
+  <div class="card">
+    <label>Site URL</label>
+    <input id="url" placeholder="https://ornek.site">
+    <div class="row">
+      <div><label>Tür</label><select id="kind"><option value="movie">Film / Dizi</option><option value="live">Canlı TV</option></select></div>
+      <div><label>Tarama derinliği</label><select id="depth"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div>
+    </div>
+    <label>Provider adı</label>
+    <input id="provider" placeholder="Örn: TavsiyeFilmProvider">
+    <button onclick="run()">Otomatik Başlat</button>
+    <div id="status" class="status">Hazır.</div>
+    <div class="small">Not: Workflow gerçek CloudStream Gradle projesi bulursa .cs3 üretir; yoksa sahte çıktı üretmek yerine analiz raporu verir.</div>
+  </div>
+</div>
+<script>
+const api="https://api.github.com";
+const $=id=>document.getElementById(id);
+function headers(){return{"Accept":"application/vnd.github+json","Authorization":"Bearer "+$("token").value.trim(),"X-GitHub-Api-Version":"2026-03-10","Content-Type":"application/json"}}
+async function req(path,opt={}){let r=await fetch(api+path,{...opt,headers:{...headers(),...(opt.headers||{})}});let t=await r.text();let d;try{d=JSON.parse(t)}catch{d=t}if(!r.ok)throw new Error((d&&d.message)||r.status+" "+r.statusText);return d}
+function log(x){$("status").textContent=x}
+async function run(){
+ try{
+  const o=$("owner").value.trim(),r=$("repo").value.trim(),b=$("branch").value.trim();
+  const url=$("url").value.trim(); if(!url)throw Error("Site URL gir.");
+  log("Workflow kontrol ediliyor...");
+  const wf=await req(`/repos/${o}/${r}/actions/workflows`);
+  const target=(wf.workflows||[]).find(x=>x.path===".github/workflows/cloudstream-builder.yml"||x.name==="CloudStream Builder AutoPilot");
+  if(!target)throw Error("cloudstream-builder.yml bulunamadı. Önce ZIP içeriğini repoya ekle.");
+  log("Workflow başlatılıyor...");
+  await req(`/repos/${o}/${r}/actions/workflows/${target.id}/dispatches`,{
+    method:"POST",
+    body:JSON.stringify({ref:b,inputs:{site_url:url,kind:$("kind").value,provider_name:$("provider").value.trim(),max_depth:$("depth").value}})
+  });
+  log("Başlatıldı.\n\nGitHub Actions çalışıyor. Actions sayfasından sonucu görebilirsin.");
+ }catch(e){log("HATA\n"+e.message)}
+}
+</script>
+</body>
+</html>

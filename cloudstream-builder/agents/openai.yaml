@@ -1,9 +1,8 @@
 interface:
-  display_name: "CloudStream Builder"
-  short_description: "Sitelerden çalışır CloudStream eklentileri üretir"
-  icon_small: "../assets/icon.svg"
-  icon_large: "../assets/logo.svg"
+  display_name: "CloudStream Builder AutoPilot"
+  short_description: "CloudStream provider analiz ve build otomasyonu"
+  default_prompt: "Use $cloudstream-builder to analyze a site and prepare a CloudStream provider build."
   brand_color: "#7C3AED"
-  default_prompt: "Use $cloudstream-builder to inspect this source and produce a verified CloudStream .cs3 provider."
+
 policy:
   allow_implicit_invocation: true

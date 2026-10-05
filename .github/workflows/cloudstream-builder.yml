@@ -1,0 +1,139 @@
+name: CloudStream Builder AutoPilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: "Analiz edilecek site URL"
+        required: true
+        type: string
+      kind:
+        description: "Provider türü"
+        required: true
+        default: "movie"
+        type: choice
+        options:
+          - movie
+          - live
+      provider_name:
+        description: "Provider adı (boş bırakılabilir)"
+        required: false
+        type: string
+      max_depth:
+        description: "Tarama derinliği"
+        required: false
+        default: "2"
+        type: string
+  push:
+    paths:
+      - "builder/**"
+      - "scripts/**"
+      - ".github/workflows/cloudstream-builder.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Create run directories
+        shell: bash
+        run: |
+          mkdir -p output/site output/build
+
+      - name: Analyze target site
+        env:
+          SITE_URL: ${{ inputs.site_url }}
+          SITE_KIND: ${{ inputs.kind }}
+          MAX_DEPTH: ${{ inputs.max_depth }}
+        run: |
+          python builder/site_scan.py \
+            --url "$SITE_URL" \
+            --kind "${SITE_KIND:-movie}" \
+            --depth "${MAX_DEPTH:-2}" \
+            --output output/site/scan.json
+
+      - name: Prepare builder manifest
+        env:
+          SITE_URL: ${{ inputs.site_url }}
+          SITE_KIND: ${{ inputs.kind }}
+          PROVIDER_NAME: ${{ inputs.provider_name }}
+        run: |
+          python builder/prepare_manifest.py \
+            --scan output/site/scan.json \
+            --url "$SITE_URL" \
+            --kind "${SITE_KIND:-movie}" \
+            --provider-name "${PROVIDER_NAME:-}" \
+            --output output/site/builder-manifest.json
+
+      - name: Detect CloudStream Gradle project
+        id: gradle_project
+        shell: bash
+        run: |
+          if [[ -f "./gradlew" && -f "./settings.gradle.kts" ]]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "root=." >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "root=" >> "$GITHUB_OUTPUT"
+            echo "No CloudStream Gradle project was found in repository root."
+          fi
+
+      - name: Build existing CloudStream project
+        if: steps.gradle_project.outputs.found == 'true'
+        working-directory: ${{ steps.gradle_project.outputs.root }}
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew make --no-daemon --stacktrace
+
+      - name: Collect CS3 output
+        shell: bash
+        run: |
+          set +e
+          find . -type f \( -name "*.cs3" -o -name "plugins.json" -o -name "repo.json" \) \
+            -not -path "./.git/*" \
+            -exec cp --parents {} output/build/ \;
+          set -e
+
+          if ! find output/build -type f -name "*.cs3" | grep -q .; then
+            cat > output/build/BUILD_STATUS.md <<'EOF'
+          # CloudStream Builder sonucu
+
+          Site analizi başarıyla üretildi.
+
+          Ancak repository içinde bir CloudStream Gradle projesi (`gradlew` + `settings.gradle.kts`) bulunmadığı için `.cs3` derlemesi çalıştırılmadı.
+
+          Bu workflow bilinçli olarak sahte `.cs3` üretmez. Gerçek provider Kotlin kaynağı ve CloudStream Gradle projesi mevcut olduğunda `make` çalıştırılır.
+          EOF
+          fi
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd output
+          find . -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+
+      - name: Upload Builder artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudstream-builder-result
+          path: output
+          retention-days: 14
